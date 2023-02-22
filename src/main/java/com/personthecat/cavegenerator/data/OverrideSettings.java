@@ -33,6 +33,9 @@ public class OverrideSettings {
     /** Whether the biomes list should be treated as a blacklist. */
     @Default Optional<Boolean> blacklistBiomes = empty();
 
+    /** If not 0, this dimension's biome provider is checked instead of the current dimension. */
+    @Default Optional<Integer> proxyDimension = empty();
+
     /** A list of biomes in which this feature can spawn. */
     @Default Optional<List<Biome>> biomes = empty();
 
@@ -88,6 +91,7 @@ public class OverrideSettings {
         final OverrideSettingsBuilder builder = builder().globalDecorators(getAllDecorators(json));
         return new HjsonMapper(json)
             .mapBool(Fields.blacklistBiomes, b -> builder.blacklistBiomes(full(b)))
+            .mapInt(Fields.proxyDimension, p -> builder.proxyDimension(full(p)))
             .mapBiomes(Fields.biomes, l -> builder.biomes(full(l)))
             .mapBool(Fields.blacklistDimensions, b -> builder.blacklistBiomes(full(b)))
             .mapIntList(Fields.dimensions, l -> builder.dimensions(full(l)))
@@ -108,6 +112,7 @@ public class OverrideSettings {
 
     public ConditionSettings.ConditionSettingsBuilder apply(ConditionSettings.ConditionSettingsBuilder builder) {
         this.blacklistBiomes.ifPresent(builder::blacklistBiomes);
+        this.proxyDimension.ifPresent(builder::proxyDimension);
         this.biomes.ifPresent(builder::biomes);
         this.blacklistDimensions.ifPresent(builder::blacklistDimensions);
         this.dimensions.ifPresent(builder::dimensions);

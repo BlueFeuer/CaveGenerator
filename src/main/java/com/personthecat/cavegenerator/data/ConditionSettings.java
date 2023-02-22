@@ -26,6 +26,9 @@ public class ConditionSettings {
     /** Whether the biomes list should be treated as a blacklist. */
     @Default boolean blacklistBiomes = false;
 
+    /** If not 0, this dimension's biome provider is checked instead of the current dimension. */
+    @Default Integer proxyDimension = 0;
+
     /** A list of biomes in which this feature can spawn. */
     @Default List<Biome> biomes = Collections.emptyList();
 
@@ -62,6 +65,7 @@ public class ConditionSettings {
     private static ConditionSettings copyInto(JsonObject json, ConditionSettingsBuilder builder) {
         return new HjsonMapper(json)
             .mapBool(Fields.blacklistBiomes, builder::blacklistBiomes)
+            .mapInt(Fields.proxyDimension, builder::proxyDimension)
             .mapBiomes(Fields.biomes, builder::biomes)
             .mapBool(Fields.blacklistDimensions, builder::blacklistDimensions)
             .mapIntList(Fields.dimensions, builder::dimensions)

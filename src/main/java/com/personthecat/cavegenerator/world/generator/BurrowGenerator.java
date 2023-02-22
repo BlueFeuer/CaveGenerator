@@ -42,8 +42,9 @@ public class BurrowGenerator extends WorldCarver implements TunnelSocket {
     public void generate(PrimerContext ctx) {
         if (this.conditions.dimensions.test(ctx.world.provider.getDimension())) {
             if (this.conditions.hasBiomes) {
-                if (ctx.biomes.anyMatches(this.conditions.biomes)) {
-                    this.fillInvalidChunks(ctx.biomes);
+                final BiomeSearch biomes = this.conditions.proxyDimension == 0 ? ctx.biomes : ctx.proxyBiomes.get(this.conditions.proxyDimension - 1);
+                if (biomes.anyMatches(this.conditions.biomes)) {
+                    this.fillInvalidChunks(biomes);
                     this.generateChecked(ctx);
                     this.invalidChunks.clear();
                 }

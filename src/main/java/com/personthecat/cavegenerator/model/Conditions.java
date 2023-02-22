@@ -38,6 +38,9 @@ public class Conditions {
     /** Height restrictions for the current feature. */
     @Default Range height = Range.of(0, 255);
 
+    /** If not 0, this dimension's biome provider is checked instead of the current dimension. */
+    @Default Integer proxyDimension = 0;
+
     /** The value produced by this generator will augment the maximum height level. */
     @Default FastNoise floor = new DummyGenerator(0F);
 
@@ -56,7 +59,8 @@ public class Conditions {
             .hasRegion(settings.region.isPresent())
             .biomes(compileBiomes(settings))
             .dimensions(compileDimensions(settings))
-            .height(settings.height);
+            .height(settings.height)
+            .proxyDimension(settings.proxyDimension);
 
         settings.floor.ifPresent(c -> builder.floor(c.getGenerator(world)));
         settings.ceiling.ifPresent(c -> builder.ceiling(c.getGenerator(world)));

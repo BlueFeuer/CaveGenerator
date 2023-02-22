@@ -49,6 +49,11 @@ public class HjsonMapper {
         return this;
     }
 
+    public HjsonMapper mapFloatList(String field, Consumer<List<Float>> ifPresent) {
+        HjsonTools.getFloatList(json, field).ifPresent(ifPresent);
+        return this;
+    }
+
     public HjsonMapper mapFloat(String field, Consumer<Float> ifPresent) {
         HjsonTools.getFloat(json, field).ifPresent(ifPresent);
         return this;

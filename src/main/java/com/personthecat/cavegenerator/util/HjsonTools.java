@@ -285,6 +285,21 @@ public class HjsonTools {
         return ints;
     }
 
+    public static Optional<List<Float>> getFloatList(JsonObject json, String field) {
+        return getArray(json, field).map(HjsonTools::toFloatList);
+    }
+
+    private static List<Float> toFloatList(JsonArray array) {
+        final List<Float> floats = new ArrayList<>();
+        for (JsonValue value : array) {
+            if (!value.isNumber()) {
+                throw runExF("Expected an numeric value: {}", value);
+            }
+            floats.add(value.asFloat());
+        }
+        return floats;
+    }
+
     /** Converts a JsonArray into an array of ints. */
     public static int[] toIntArray(JsonArray array) {
         final int[] ints = new  int[array.size()];

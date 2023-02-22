@@ -4,14 +4,23 @@ import com.personthecat.cavegenerator.config.ConfigFile;
 import com.personthecat.cavegenerator.data.CavernSettings;
 import com.personthecat.cavegenerator.data.NoiseMapSettings;
 import com.personthecat.cavegenerator.data.NoiseSettings;
+import com.personthecat.cavegenerator.model.ArchaeneWallFixed;
+import com.personthecat.cavegenerator.model.ConfiguredCaveBlock;
 import com.personthecat.cavegenerator.model.Range;
 import com.personthecat.cavegenerator.noise.DummyGenerator;
 import com.personthecat.cavegenerator.util.PositionFlags;
 import com.personthecat.cavegenerator.world.BiomeSearch;
 import fastnoise.FastNoise;
+import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
+import lombok.extern.log4j.Log4j2;
+import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldProvider;
+import net.minecraft.world.biome.Biome;
 import net.minecraft.world.chunk.ChunkPrimer;
+import net.minecraft.block.state.IBlockState;
+import net.minecraft.util.math.Vec3i;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,35 +28,209 @@ import java.util.List;
 import java.util.Random;
 import java.util.stream.Collectors;
 
+import static java.lang.Math.*;
+
+@Log4j2
 public class CavernGenerator extends WorldCarver implements TunnelSocket {
 
-    private final List<ChunkTestData> invalidChunks;
-    private final double[] wallNoise = new double[256];
+    //private final List<ChunkTestData> invalidChunks;
+    //private final double[] wallNoise = new double[256];
     private final List<FastNoise> generators;
-    private final FastNoise wallOffset;
+    //private final FastNoise wallOffset;
     private final FastNoise heightOffset;
     private final PositionFlags caverns;
     private final double wallCurveRatio;
-    private final boolean wallInterpolated;
+    //private final boolean wallInterpolated;
     private final int maxY;
+    private final int minY;
     private final int diffY;
-    private final int curveOffset;
+    //private final int curveOffset;
     protected final CavernSettings cfg;
+    private final float[] archHeight = new float[256];
+    private final boolean useArchWalls;
+    private final boolean archWallOnly;
+    private final float[] archWalls = new float[32];
+    private final int[][] archWallPlacement = new int[16][16];
+    private final int[][][][] archWallArray;
+    //private final int[][][][] archWallArray = {{{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7}, {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}, {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, {0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, {0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}, {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3}, {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}, {6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6}, {7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7}, {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8}, {9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9}, {10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}, {11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11}, {12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12}, {13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13}, {14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0}, {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0}, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0}, {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0}, {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0}, {13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}}, {{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7}, {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}, {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, {0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, {0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}}, {{0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}, {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}, {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, {5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}, {7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}, {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, {9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}, {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25}, {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}, {12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}, {13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}, {14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29}}, {{15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15}, {16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16}, {17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17}, {18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18}, {19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19}, {20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20}, {21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21}, {22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22}, {23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23}, {24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24}, {25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25}, {26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26}, {27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27}, {28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28}, {29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29}, {30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30}}, {{14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}, {16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, {17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2}, {18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3}, {19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4}, {20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5}, {21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6}, {22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7}, {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8}, {24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9}, {25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10}, {26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11}, {27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12}, {28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13}, {29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0}, {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0}, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0}, {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0}, {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0}, {13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0}}}, {{{0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}}, {{15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}}, {{31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}}, {{30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}}, {{14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}}}, {{{0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, {0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29}, {13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}, {12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}, {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}, {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25}, {9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}, {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, {7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}, {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}, {5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}, {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}}, {{30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30}, {29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29}, {28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28}, {27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27}, {26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26}, {25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25}, {24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24}, {23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23}, {22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22}, {21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21}, {20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20}, {19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19}, {18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18}, {17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17}, {16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16}, {15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15}}, {{29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14}, {28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13}, {27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12}, {26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11}, {25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10}, {24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9}, {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8}, {22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7}, {21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6}, {20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5}, {19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4}, {18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3}, {17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2}, {16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}}, {{13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0}, {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0}, {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0}, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0}, {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0}, {8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0}, {7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}}, {{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, {0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14}, {13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13}, {12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12}, {11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11}, {10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}, {9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9}, {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8}, {7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7}, {6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6}, {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}, {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3}, {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}, {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0}, {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0}, {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0}, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0}, {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0}, {8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0}, {7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}}};
+    private final boolean generateCastle;
+    private final boolean archInterpolation;
+
+    //private final float[][][] interpMult = new float[][][] {{{1f, 0.666666666666667f, 0.333333333333333f}, {0.5f, 0.333333333333333f, 0.166666666666667f}}, {{0.666666666666667f, 0.444444444444444f, 0.222222222222222f}, {0.333333333333333f, 0.222222222222222f, 0.111111111111111f}}, {{0.333333333333333f, 0.222222222222222f, 0.111111111111111f}, {0.166666666666667f, 0.111111111111111f, 0.0555555555555556f}}};
+    //private final float[][][] interpMult;
+    //private final int[][][] interpArray = new int[][][] {{{0, 1, 2}, {9, 10, 11}}, {{3, 4, 5}, {12, 13, 14}}, {{6, 7, 8}, {15, 16, 17}}};
+    private final int[][][] interpArray;
+    //private final List<List<Vec3i>> interpList = Arrays.asList(Arrays.asList(new Vec3i(0,0,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(1,1,1), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(1,1,1), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(1,1,1), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(1,1,1), new Vec3i(1,1,0), new Vec3i(0,1,0)));
+    private final List<List<sampler>> interpList;
+    private final int interpResolutionX;
+    private final int interpResolutionY;
+    private final int interpResolutionZ;
+    private final int interpSizeX;
+    private final int interpSizeY;
+    private final int interpSizeZ;
+    private final boolean archaeneDecorator;
+
+    private final float archSampleStretch;
+    //Old values:
+    //private final float[][][] interpMult = new float[][][] {{{1f, 0.67f, 0.33f}, {0.5f, 0.375f, 0.125f}}, {{0.67f, 0.5f, 0.25f}, {0.375f, 0.3f, 0.1f}}, {{0.33f, 0.25f, 0f}, {0.125f, 0.1f, 0f}}}
+    //private final int[][][] interpArray = new int[][][] {{{0, 1, 2}, {9, 10, 11}}, {{3, 4, 5}, {12, 13, 14}}, {{6, 7, 8}, {15, 16, 17}}};
+    //private final List<List<Vec3i>> interpList = Arrays.asList(Arrays.asList(new Vec3i(0,0,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(1,1,1), new Vec3i(1,1,0), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(0,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(1,1,1), new Vec3i(0,1,0)), Arrays.asList(new Vec3i(1,0,0), new Vec3i(1,0,1), new Vec3i(0,0,1), new Vec3i(0,1,1), new Vec3i(1,1,1), new Vec3i(1,1,0)));
+
+    //private float[][][] interpSamples = new float[6][128][6];
+    private float[][][] interpSamples;
+    private boolean[] interpHeightSkip;
+
+
 
     public CavernGenerator(CavernSettings cfg, World world) {
         super(cfg.conditions, cfg.decorators, world);
         this.generators = createGenerators(cfg.generators, world);
-        this.wallOffset = cfg.wallOffset.map(n -> n.getGenerator(world)).orElse(new DummyGenerator(0F));
+        //this.wallOffset = cfg.wallOffset.map(n -> n.getGenerator(world)).orElse(new DummyGenerator(0F));
         this.heightOffset = cfg.offset.map(n -> n.getGenerator(world)).orElse(new DummyGenerator(0F));
         this.wallCurveRatio = cfg.wallCurveRatio;
-        this.wallInterpolated = cfg.wallInterpolation;
+        this.archWallOnly = cfg.archaeneWallOnly;
 
-        final int minY = conditions.height.min + cfg.conditions.floor.map(n -> n.range.min).orElse(0);
+        /*
+            Sampling logic (because it took me a bit to figure it out):
+            interpolation in 1 dimension
+                xd = value between 0-1 representing the relative distance between the upper and lower samples
+                    I.e. if you start at 0 and sample every 4th block, then a point at x=1 would be (1%4)/4 = 0.25, or 25% of the way from 0 -> 4
+                a = 0 sample
+                b = 1 sample
+                i = a*(-xd+1) + b*xd
+
+            interpolation in 2 dimensions
+                xd, yd = values between 0-1 representing the relative distance between the upper and lower samples
+                a = 0,0 sample
+                b = 1,0 sample
+                c = 0,1 sample
+                d = 1,1 sample
+                i = a*((-xd+1) * (-yd+1)) + b*(xd * (-yd+1)) + c*((-xd+1) * yd) + d*(xd*yd)
+
+            interpolation in 3 dimensions
+                xd, yd, zd = values between 0-1 representing the relative distance between the upper and lower samples
+                a = 0,0,0 sample
+                b = 1,0,0 sample
+                c = 0,0,1 sample
+                d = 1,0,1 sample
+                e = 0,1,0 sample
+                f = 1,1,0 sample
+                g = 0,1,1 sample
+                h = 1,1,1 sample
+                i = a*((-xd+1) * (-yd+1) * (-zd+1)) + b*(xd * (-yd+1) * (-zd+1)) + c*((-xd+1) * (-yd+1) * zd) + d*(xd * (-yd+1) * zd) + e*((-xd+1) * yd * (-zd+1)) + f*(xd * yd * (-zd+1)) + g*((-xd+1) * yd * zd) + h*(xd * yd * zd)
+
+
+            xd, yd, and zd can be obtained by:
+            xd = ((x%Resolution)/Resolution)
+            where Resolution is the number of blocks between samples for the axis.
+            If you have a resolution of 4, meaning you sample every 4 blocks, then you'd use ((x%4)/4).
+
+            I try to make the math more efficient by pre-calculating what samples get checked and their multipliers,
+            then storing it to a list that can be quickly looped through for each coordinate.
+         */
+
+        this.archInterpolation = cfg.archaeneInterpolation;
+        this.archSampleStretch = cfg.archaeneInterpStretch;
+        this.archaeneDecorator = cfg.archaeneDecorator;
+        this.generateCastle = !cfg.archaeneWallFixed.isEmpty();
+
+        if(this.archInterpolation && !this.archaeneDecorator && !this.generateCastle) {
+            this.interpResolutionX = cfg.archaeneInterpX;
+            this.interpResolutionY = cfg.archaeneInterpY;
+            this.interpResolutionZ = cfg.archaeneInterpZ;
+            // Set up interpMult
+            float[][][] interpMult = new float[interpResolutionX+1][interpResolutionY+1][interpResolutionZ+1];
+            for (int z = 0; z < interpResolutionZ+1; z++) {
+                for (int y = 0; y < interpResolutionY+1; y++) {
+                    for (int x = 0; x < interpResolutionX+1; x++) {
+                        final float multX = max((((float)x*-1f +(float)interpResolutionX)/(float)interpResolutionX), 0f);
+                        final float multY = max((((float)y*-1f +(float)interpResolutionY)/(float)interpResolutionY), 0f);
+                        final float multZ = max((((float)z*-1f +(float)interpResolutionZ)/(float)interpResolutionZ), 0f);
+                        final float mult = multX*multY*multZ;
+                        interpMult[x][y][z] = mult;
+                    }
+                }
+            }
+            //this.interpMult = interpMult;
+
+            // Set up interpList and interpArray
+            int[][][] interpArray = new int[interpResolutionX][interpResolutionY][interpResolutionZ];
+            List<List<sampler>> interpList = new ArrayList<>();
+            int i = 0;
+
+            for (int z = 0; z < interpResolutionZ; z++) {
+                for (int y = 0; y < interpResolutionY; y++) {
+                    for (int x = 0; x < interpResolutionX; x++) {
+                        List<sampler> posList = new ArrayList<>();
+                        //if mult at [x][y][z] is >0, add 0,0,0 to list
+                        //if mult at [-x+resx][y][z] is >0, add 1,0,0 to list
+                        //if mult at [-x+resx][y][-z+resz] is >0, add 1,0,1 to list
+                        //if mult at [x][y][-z+resz] is >0, add 0,0,1 to list
+                        //if mult at [x][-y+resy][-z+resz] is >0, add 0,1,1 to list
+                        //if mult at [-x+resx][-y+resy][-z+resz] is >0, add 1,1,1 to list
+                        //if mult at [-x+resx][-y+resy][z] is >0, add 1,1,0 to list
+                        //if mult at [x][-y+resy][z] is >0, add 0,1,0 to list
+                        if (interpMult[x][y][z] > 0f)
+                            posList.add(new sampler(0,0,0, interpMult[x][y][z]));
+                        log.info("0 0 0 x {} y {} z {} mult {}", x, y, z, interpMult[x][y][z]);
+                        if (interpMult[-x+interpResolutionX][y][z] > 0f)
+                            posList.add(new sampler(1,0,0, interpMult[-x+interpResolutionX][y][z]));
+                        if (interpMult[-x+interpResolutionX][y][-z+interpResolutionZ] > 0f)
+                            posList.add(new sampler(1,0,1, interpMult[-x+interpResolutionX][y][-z+interpResolutionZ]));
+                        if (interpMult[x][y][-z+interpResolutionZ] > 0f)
+                            posList.add(new sampler(0,0,1, interpMult[x][y][-z+interpResolutionZ]));
+                        if (interpMult[x][-y+interpResolutionY][-z+interpResolutionZ] > 0f)
+                            posList.add(new sampler(0,1,1, interpMult[x][-y+interpResolutionY][-z+interpResolutionZ]));
+                        if (interpMult[-x+interpResolutionX][-y+interpResolutionY][-z+interpResolutionZ] > 0f)
+                            posList.add(new sampler(1,1,1, interpMult[-x+interpResolutionX][-y+interpResolutionY][-z+interpResolutionZ]));
+                        if (interpMult[-x+interpResolutionX][-y+interpResolutionY][z] > 0f)
+                            posList.add(new sampler(1,1,0, interpMult[-x+interpResolutionX][-y+interpResolutionY][z]));
+                        if (interpMult[x][-y+interpResolutionY][z] > 0f)
+                            posList.add(new sampler(0,1,0, interpMult[x][-y+interpResolutionY][z]));
+                        interpArray[x][y][z] = i;
+                        i++;
+                        interpList.add(posList);
+                    }
+                }
+            }
+
+            this.interpArray = interpArray;
+            this.interpList = interpList;
+
+            this.interpSizeX = getInterpolationSizeXZ(interpResolutionX);
+            this.interpSizeY = getInterpolationSizeY(interpResolutionY);
+            this.interpSizeZ = getInterpolationSizeXZ(interpResolutionZ);
+            this.interpSamples = new float[this.interpSizeX][this.interpSizeY][this.interpSizeZ];
+            this.interpHeightSkip = new boolean[this.interpSizeY];
+
+
+        } else {
+            //this.interpMult = null;
+            this.interpList = null;
+            this.interpArray = null;
+            this.interpSizeX = 1;
+            this.interpSizeY = 16;
+            this.interpSizeZ = 1;
+            this.interpResolutionX = 16;
+            this.interpResolutionY = 16;
+            this.interpResolutionZ = 16;
+            this.interpHeightSkip = new boolean[1];
+        }
+
+
+
+        //this.wallInterpolated = cfg.wallInterpolation;
+
+        this.minY = conditions.height.min + cfg.conditions.floor.map(n -> n.range.min).orElse(0);
         this.maxY = conditions.height.max + cfg.conditions.ceiling.map(n -> n.range.max).orElse(0);
         this.diffY = this.maxY - minY;
         this.caverns = new PositionFlags(16 * 16 * this.maxY - minY);
-        this.curveOffset = (this.diffY + 1) / -2;
+        //this.curveOffset = (this.diffY + 1) / -2;
 
+        //final int r = BiomeSearch.size();
+        //this.invalidChunks = new ArrayList<>(r);
+
+        /*
         final int r = BiomeSearch.size();
         this.invalidChunks = new ArrayList<>(this.wallInterpolated ? (r * 2 + 1) * 2 - 1 : r);
         if (cfg.walls.isPresent()) {
@@ -55,6 +238,58 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
         } else {
             Arrays.fill(wallNoise, 15);
         }
+        */
+        Arrays.fill(archHeight, 0.0f);
+        if (!cfg.archaeneHeight.isEmpty()) {
+            final int len = cfg.archaeneHeight.size();
+            for (int i = 0; i < len; i++) {
+                archHeight[i] = cfg.archaeneHeight.get(i);
+            }
+        }
+        if (!cfg.archaeneWalls.isEmpty()) {
+            final int len = cfg.archaeneWalls.size();
+            for (int i = 0; i < len; i++) {
+                archWalls[i] = cfg.archaeneWalls.get(i);
+            }
+            if (!cfg.archaeneWallArray.isEmpty()) {
+                this.archWallArray = new int[5][5][16][16]; // chunkX chunkZ blockX blockZ
+                int i = 0;
+                for (int cX = 0; cX < 5; cX++) {
+                    for (int cY = 0; cY < 5; cY++) {
+                        for (int bX = 0; bX < 16; bX++) {
+                            for (int bY = 0; bY < 16; bY++) {
+                                archWallArray[cX][cY][bX][bY] = cfg.archaeneWallArray.get(i);
+                                i++;
+                            }
+                        }
+                    }
+                }
+            } else {
+                // Default array
+                this.archWallArray = new int[][][][] {{{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7}, {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}, {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, {0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, {0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}, {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3}, {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}, {6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6}, {7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7}, {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8}, {9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9}, {10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}, {11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11}, {12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12}, {13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13}, {14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0}, {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0}, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0}, {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0}, {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0}, {13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}}, {{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7}, {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}, {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, {0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, {0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}}, {{0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}, {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}, {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, {5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}, {7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}, {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, {9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}, {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25}, {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}, {12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}, {13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}, {14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29}}, {{15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15}, {16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16}, {17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17}, {18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18}, {19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19}, {20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20}, {21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21}, {22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22}, {23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23}, {24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24}, {25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25}, {26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26}, {27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27}, {28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28}, {29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29}, {30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30}}, {{14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}, {16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, {17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2}, {18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3}, {19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4}, {20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5}, {21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6}, {22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7}, {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8}, {24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9}, {25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10}, {26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11}, {27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12}, {28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13}, {29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0}, {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0}, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0}, {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0}, {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0}, {13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0}}}, {{{0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}}, {{15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}, {15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30}}, {{31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}, {31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31}}, {{30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}, {30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15}}, {{14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}}}, {{{0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, {0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29}, {13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28}, {12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27}, {11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26}, {10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25}, {9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24}, {8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23}, {7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22}, {6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21}, {5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20}, {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19}, {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18}, {2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17}, {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}, {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15}, {0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14}}, {{30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30}, {29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29}, {28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28}, {27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27, 27}, {26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26, 26}, {25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25}, {24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24, 24}, {23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23, 23}, {22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22}, {21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21, 21}, {20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20, 20}, {19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19, 19}, {18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18, 18}, {17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17, 17}, {16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16, 16}, {15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15}}, {{29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14}, {28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13}, {27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12}, {26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11}, {25, 24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10}, {24, 23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9}, {23, 22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8}, {22, 21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7}, {21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6}, {20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5}, {19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4}, {18, 17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3}, {17, 16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2}, {16, 15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1}, {15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0}, {14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0}}, {{13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0}, {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0}, {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0}, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0}, {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0}, {8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0}, {7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}}, {{{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13}, {0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12}, {0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11}, {0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, {0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9}, {0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7, 8}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6, 7}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5, 6}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4, 5}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3, 4}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 2}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14, 14}, {13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13}, {12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12, 12}, {11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11, 11}, {10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10}, {9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9}, {8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8}, {7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7}, {6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6}, {5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5}, {4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4}, {3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3}, {2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2}, {1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0}, {12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0}, {11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0}, {10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0}, {9, 8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0}, {8, 7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0}, {7, 6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {6, 5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {5, 4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {4, 3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {3, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}, {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}, {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}}}};
+            }
+            this.useArchWalls = true;
+        } else {
+            if (!cfg.archaeneWallArray.isEmpty() && this.archaeneDecorator) {
+                this.useArchWalls = true;
+                this.archWallArray = new int[5][5][16][16]; // chunkX chunkZ blockX blockZ
+                int i = 0;
+                for (int cX = 0; cX < 5; cX++) {
+                    for (int cY = 0; cY < 5; cY++) {
+                        for (int bX = 0; bX < 16; bX++) {
+                            for (int bY = 0; bY < 16; bY++) {
+                                archWallArray[cX][cY][bX][bY] = cfg.archaeneWallArray.get(i);
+                                i++;
+                            }
+                        }
+                    }
+                }
+            } else {
+                this.useArchWalls = false;
+                this.archWallArray = null;
+           }
+        }
+
         this.cfg = cfg;
     }
 
@@ -62,6 +297,103 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
         return settings.stream().map(s -> s.getGenerator(world)).collect(Collectors.toList());
     }
 
+    private int getInterpolationSizeXZ(int res) {
+        switch (res) {
+            case 1:
+                return 16;
+            case 2:
+                return 9;
+            case 4:
+                return 5;
+            case 5:
+            case 6:
+            case 7:
+                return 4;
+            case 8:
+                return 3;
+            case 15:
+            case 16:
+                return 2;
+        }
+        // Default to a resolution of 3
+        return 6;
+    }
+    private int getInterpolationSizeY(int res) {
+        switch (res) {
+            case 1:
+                return 256;
+            case 3:
+                return 86;
+            case 4:
+                return 64;
+            case 8:
+                return 32;
+            case 16:
+                return 16;
+        }
+        // Default to a resolution of 2
+        return 128;
+    }
+
+    private void sample(int chunkX, int chunkZ) {
+        for(float[][] faa:this.interpSamples) {
+            for(float[] fa:faa) {
+                java.util.Arrays.fill(fa, -2f);
+            }
+        }
+        for (FastNoise noise : this.generators) {
+            for (int sx = 0; sx < this.interpSizeX; sx++) {
+                final int x = (sx * this.interpResolutionX) + (chunkX * 16);
+                for (int sz = 0; sz < this.interpSizeZ; sz++) {
+                    final int z = (sz * this.interpResolutionZ) + (chunkZ * 16);
+                    for (int sy = 0; sy < this.interpSizeY; sy++) {
+                        final int y = (sy * this.interpResolutionY);
+                        // Gets the highest noise value of all noise used
+                        // Todo - allow for customization of how multiple noises overlap with interpolation
+                        this.interpSamples[sx][sy][sz] = max((noise.m_invert ? noise.GetNoise(x, y, z)*-1 : noise.GetNoise(x, y, z)) - noise.m_booleanMaxThreshold, this.interpSamples[sx][sy][sz]);
+                        if (this.archSampleStretch > 0.0f && sy > 0) {
+                            final float sampleL = this.interpSamples[sx][sy-1][sz];
+                            if (sampleL > this.interpSamples[sx][sy][sz]) {
+                                this.interpSamples[sx][sy][sz] += (sampleL - this.interpSamples[sx][sy][sz])*this.archSampleStretch;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    private float getSample(int xdiv, int ydiv, int zdiv, int xmod, int ymod, int zmod) {
+        float noise = 0f;
+        for (sampler i : this.interpList.get(interpArray[xmod][ymod][zmod])) {
+            noise += this.interpSamples[(int)(xdiv + i.x)][(int)(ydiv + i.y)][(int)(zdiv + i.z)] * i.mult;
+        }
+        return noise;
+    }
+
+
+
+
+    /*
+    private float getSample(int x, int y, int z) {
+        float noise = 0f;
+        final int xm = x%3;
+        final int ym = y%2;
+        final int zm = z%3;
+        for (Vec3i i : this.interpList.get(interpArray[zm][ym][xm])) {
+            int xi = i.getX() == 0 ? xm : (xm*-1)+3;
+            int yi = ym;
+            int zi = i.getZ() == 0 ? zm : (zm*-1)+3;
+            float mult = this.interpMult[xi][yi][zi];
+            noise += this.interpSamples[(int)(x/3 + i.getX())][(int)(y/2 + i.getY())][(int)(z/3 + i.getZ())] * mult;
+        }
+        return noise;
+    }
+
+     */
+
+    /*
     private void setupWallNoise(NoiseMapSettings settings, World world) {
         final FastNoise noise = settings.getGenerator(world);
         final int len = wallNoise.length;
@@ -76,21 +408,46 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
             this.wallNoise[i] = noise.GetAdjustedNoise(x, y);
         }
     }
+     */
 
     @Override
     public void generate(PrimerContext ctx) {
         if (this.conditions.dimensions.test(ctx.world.provider.getDimension())) {
             if (this.conditions.hasBiomes) {
-                if (ctx.biomes.anyMatches(this.conditions.biomes)) {
-                    this.fillInvalidChunks(ctx.biomes, ctx.chunkX, ctx.chunkZ);
-                    this.generateChecked(ctx);
-                    this.invalidChunks.clear();
+                final BiomeSearch biomes = this.conditions.proxyDimension == 0 ? ctx.biomes : ctx.proxyBiomes.get(this.conditions.proxyDimension - 1);
+                if (biomes.anyMatches(this.conditions.biomes)) {
+                    if (this.conditions.hasRegion) {
+                        if (this.conditions.region.GetBoolean(ctx.offsetX + 8, ctx.offsetZ + 8)) {
+                            if (useArchWalls) {
+                                for(int[] fa:archWallPlacement) {
+                                    java.util.Arrays.fill(fa, 0);
+                                }
+                                this.fillArchWalls(biomes, ctx.chunkX, ctx.chunkZ);
+                            }
+                            this.generateChecked(ctx);
+                            //this.invalidChunks.clear();
+                        }
+                    } else {
+                        if (useArchWalls) {
+                            for(int[] fa:archWallPlacement) {
+                                java.util.Arrays.fill(fa, 0);
+                            }
+                            this.fillArchWalls(biomes, ctx.chunkX, ctx.chunkZ);
+                        }
+                        this.generateChecked(ctx);
+                        //this.invalidChunks.clear();
+                    }
                 }
             } else if (this.conditions.hasRegion) {
-                if (this.conditions.region.GetBoolean(ctx.offsetX, ctx.offsetZ)) {
-                    this.fillInvalidChunks(ctx.chunkX, ctx.chunkZ);
+                if (this.conditions.region.GetBoolean(ctx.offsetX + 8, ctx.offsetZ + 8)) {
+                    if (useArchWalls) {
+                        for(int[] fa:archWallPlacement) {
+                            java.util.Arrays.fill(fa, 0);
+                        }
+                        this.fillArchWalls(ctx.chunkX, ctx.chunkZ);
+                    }
                     this.generateChecked(ctx);
-                    this.invalidChunks.clear();
+                    //this.invalidChunks.clear();
                 }
             } else {
                 this.generateChecked(ctx);
@@ -99,6 +456,50 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
         }
     }
 
+    private void fillArchWalls(BiomeSearch biomes, int chunkX, int chunkZ) {
+        for (BiomeSearch.Data d : biomes.surrounding.get()) {
+            if (!(this.conditions.biomes.test(d.biome) && this.conditions.region.GetBoolean(d.centerX, d.centerZ))) {
+                //this.invalidChunks.add(new ChunkTestData(d.chunkX, d.chunkZ));
+                int aX = d.chunkX - chunkX + 2;
+                int aZ = d.chunkZ - chunkZ + 2;
+                if (aX <= 4 && aZ <= 4 && aX >= 0 && aZ >= 0) {
+                    for (int pX = 0; pX <= 15; pX++) {
+                        for (int pZ = 0; pZ <= 15; pZ++) {
+                            int sX = (pX * -1) + 15;
+                            int sZ = (pZ * -1) + 15;
+                            archWallPlacement[pX][pZ] = max(archWallPlacement[pX][pZ], archWallArray[aX][aZ][sX][sZ]);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void fillArchWalls(int chunkX, int chunkZ) {
+        final int range = ConfigFile.biomeRange;
+        for (int cX = chunkX - range; cX <= chunkX + range; cX++) {
+            for (int cZ = chunkZ - range; cZ <= chunkZ + range; cZ++) {
+                final int centerX = cX * 16 + 8;
+                final int centerZ = cZ * 16 + 8;
+                if (!this.conditions.region.GetBoolean(centerX, centerZ)) {
+                    //this.invalidChunks.add(new ChunkTestData(chunkX, chunkZ));
+                    int aX = cX - chunkX + 2;
+                    int aZ = cZ - chunkZ + 2;
+                    if (aX <= 4 && aZ <= 4 && aX >= 0 && aZ >= 0) {
+                        for (int pX = 0; pX <= 15; pX++) {
+                            for (int pZ = 0; pZ <= 15; pZ++) {
+                                int sX = (pX * -1) + 15;
+                                int sZ = (pZ * -1) + 15;
+                                archWallPlacement[pX][pZ] = max(archWallPlacement[pX][pZ], archWallArray[aX][aZ][sX][sZ]);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /*
     private void fillInvalidChunks(BiomeSearch biomes, int x, int z) {
         if (this.wallInterpolated) {
             this.fillInterpolated(biomes, x, z);
@@ -192,11 +593,167 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
             }
         }
     }
+     */
 
     @Override
     protected void generateChecked(PrimerContext ctx) {
-        this.generateCaverns(ctx.heightmap, ctx.localRand, ctx.world, ctx.primer, ctx.chunkX, ctx.chunkZ);
+        if (generateCastle) {
+            this.generateCastle(ctx.heightmap, ctx.localRand, ctx.world, ctx.primer, ctx.chunkX, ctx.chunkZ);
+        } else {
+            if (this.archaeneDecorator) {
+                this.generateCavernsDecor(ctx.heightmap, ctx.localRand, ctx.world, ctx.primer, ctx.chunkX, ctx.chunkZ);
+            } else if (this.archInterpolation) {
+                this.sample(ctx.chunkX, ctx.chunkZ);
+                this.generateCavernsSampled(ctx.heightmap, ctx.localRand, ctx.world, ctx.primer, ctx.chunkX, ctx.chunkZ);
+            } else {
+                this.generateCaverns(ctx.heightmap, ctx.localRand, ctx.world, ctx.primer, ctx.chunkX, ctx.chunkZ);
+            }
+        }
     }
+
+    /** Generates giant air pockets in this chunk using a series of 3D noise generators. */
+    private void generateCavernsDecor(int[][] heightmap, Random rand, World world, ChunkPrimer primer, int chunkX, int chunkZ) {
+        for (int x = 0; x < 16; x++) {
+            final int actualX = x + (chunkX * 16);
+            for (int z = 0; z < 16; z++) {
+                final int actualZ = z + (chunkZ * 16);
+                if (!this.useArchWalls || archWallPlacement[x][z] <= (int)(rand.nextFloat()*20)) {
+                    this.generateColumnDecor(heightmap, primer, x, z, actualX, actualZ);
+                }
+            }
+        }
+        this.decorateAll(this.caverns, rand, world, primer, chunkX, chunkZ);
+    }
+
+    private void generateColumnDecor(int[][] heightmap, ChunkPrimer primer, int x, int z, int actualX, int actualZ) {
+        final Range height = this.conditions.getColumn(heightmap, actualX, actualZ);
+        final int min = max(1, height.min);
+        final int max = min(255, height.max);
+        for (int y = min; y < max; y++) {
+            if (this.decorators.canReplace.test(primer.getBlockState(x, y, z))) {
+                this.caverns.add(x, y, z);
+                //return;
+            }
+        }
+    }
+
+
+
+    /** Generates giant air pockets in this chunk using a series of 3D noise generators. */
+    private void generateCavernsSampled(int[][] heightmap, Random rand, World world, ChunkPrimer primer, int chunkX, int chunkZ) {
+        final int resX = this.interpResolutionX;
+        final int resZ = this.interpResolutionZ;
+        int xd = -1;
+        for (int sx = 0; sx < 16; sx += resX) {
+            xd++;
+            int zd = -1;
+            for (int sz = 0; sz < 16; sz += resZ) {
+                zd++;
+                Arrays.fill(interpHeightSkip, false);
+                if (xd+1 < this.interpSizeX && zd+1 < this.interpSizeZ) {
+                    if(this.interpSamples[xd][0][zd] <= 0f ||
+                            this.interpSamples[xd + 1][0][zd] <= 0f ||
+                            this.interpSamples[xd][0][zd + 1] <= 0f ||
+                            this.interpSamples[xd + 1][0][zd + 1] <= 0f) {
+                        this.interpHeightSkip[0] = true;
+                    }
+                    for (int y = 1; y < this.interpSizeY; y++) {
+                        if(this.interpSamples[xd][y][zd] <= 0f ||
+                                this.interpSamples[xd + 1][y][zd] <= 0f ||
+                                this.interpSamples[xd][y][zd + 1] <= 0f ||
+                                this.interpSamples[xd + 1][y][zd + 1] <= 0f) {
+                            this.interpHeightSkip[y] = true;
+                            this.interpHeightSkip[y-1] = true;
+                        }
+                    }
+                } else if (xd+1 < this.interpSizeX) {
+                    if(this.interpSamples[xd][0][zd] <= 0f ||
+                            this.interpSamples[xd + 1][0][zd] <= 0f) {
+                        this.interpHeightSkip[0] = true;
+                    }
+                    for (int y = 1; y < this.interpSizeY; y++) {
+                        if(this.interpSamples[xd][y][zd] <= 0f ||
+                                this.interpSamples[xd + 1][y][zd] <= 0f) {
+                            this.interpHeightSkip[y] = true;
+                            this.interpHeightSkip[y-1] = true;
+                        }
+                    }
+                } else if (zd+1 < this.interpSizeZ) {
+                    if(this.interpSamples[xd][0][zd] <= 0f ||
+                            this.interpSamples[xd][0][zd + 1] <= 0f) {
+                        this.interpHeightSkip[0] = true;
+                    }
+                    for (int y = 1; y < this.interpSizeY; y++) {
+                        if(this.interpSamples[xd][y][zd] <= 0f ||
+                                this.interpSamples[xd][y][zd + 1] <= 0f) {
+                            this.interpHeightSkip[y] = true;
+                            this.interpHeightSkip[y-1] = true;
+                        }
+                    }
+                } else {
+                    if(this.interpSamples[xd][0][zd] <= 0f) {
+                        this.interpHeightSkip[0] = true;
+                    }
+                    for (int y = 1; y < this.interpSizeY; y++) {
+                        if(this.interpSamples[xd][y][zd] <= 0f) {
+                            this.interpHeightSkip[y] = true;
+                            this.interpHeightSkip[y-1] = true;
+                        }
+                    }
+                }
+                for (int x = 0; x < Math.min(resX, 16 - sx); x++) {
+                    for (int z = 0; z < Math.min(resZ, 16 - sz); z++) {
+                        if (!this.archWallOnly || archWallPlacement[x][z] > 0) {
+                            this.generateColumnSampled(heightmap, rand, primer, x + sx, z + sz, chunkX, chunkZ, x + sx + chunkX*16, z + sz + chunkZ*16, xd, zd, x, z);
+                        }
+                    }
+                }
+            }
+        }
+        // Caverns must be completely generated before decorating.
+        this.decorateAll(this.caverns, rand, world, primer, chunkX, chunkZ);
+    }
+
+    private void generateColumnSampled(int[][] heightmap, Random rand, ChunkPrimer primer, int x, int z, int chunkX, int chunkZ, int actualX, int actualZ, int xdiv, int zdiv, int xmod, int zmod) {
+        //final BorderData border = this.getNearestBorder(actualX, actualZ);
+        //final double distance = border.distance;
+        //final int offset = border.offset;
+        final int resY = this.interpResolutionY;
+        final Range height = this.conditions.getColumn(heightmap, actualX, actualZ);
+        // Adjust the height to accommodate the shell.
+        final int d = (int) this.decorators.shell.radius;
+        final int min = max(1, height.min - d);
+        final int max = min(255, height.max + d);
+        final int yO = (int) this.heightOffset.GetAdjustedNoise(actualX, actualZ);
+        int yd = -1;
+        final float archWall = useArchWalls ? archWalls[archWallPlacement[x][z]] : 0.0f;
+        for (int sy = min; sy < max; sy  += resY) {
+            yd++;
+            if (interpHeightSkip[yd]) {
+                for (int y = 0; y < Math.min(resY, max - sy); y++) {
+                    this.placeSampled(rand, primer, height, x, y + sy, z, yO, chunkX, chunkZ, actualX, actualZ, archWall, xdiv, zdiv, yd, xmod, zmod, y);
+                }
+            }
+        }
+    }
+
+    private void placeSampled(Random rand, ChunkPrimer primer, Range height, int x, int y, int z, int yO, int chunkX, int chunkZ, int actualX, int actualZ, float archWallAddition, int xdiv, int zdiv, int ydiv, int xmod, int zmod, int ymod) {
+        float value = this.getSample(xdiv, ydiv, zdiv, xmod, ymod, zmod) + archHeight[max(y + yO, 0)] + archWallAddition;
+            //log.info("value {} x {} y {} z {} xdiv {} ydiv {} zdiv {} xmod {} ymod {} zmod {}, archheight {} archwall {}", value, x, y, z, xdiv, ydiv, zdiv, xmod, ymod, zmod, archHeight[max(y + yO, 0)], archWallAddition);
+            //final float value = Math.max(Math.min(noise.GetNoise(actualX, y + yO, actualZ) + archHeight[Math.max(y + yO, 0)] + archWallAddition, 1.0f), -1.0f);
+        if (value <= 0f) {
+            if (height.contains(y)) {
+                this.replaceBlock(rand, primer, x, y, z, chunkX, chunkZ);
+            } else {
+                this.generateShell(rand, primer, x, y, z, y, chunkX, chunkZ);
+            }
+            return;
+        } else if (value <= 0f + this.decorators.shell.noiseThreshold) {
+            this.generateShell(rand, primer, x, y, z, y, chunkX, chunkZ);
+        }
+    }
+
+
 
     /** Generates giant air pockets in this chunk using a series of 3D noise generators. */
     private void generateCaverns(int[][] heightmap, Random rand, World world, ChunkPrimer primer, int chunkX, int chunkZ) {
@@ -204,7 +761,9 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
             final int actualX = x + (chunkX * 16);
             for (int z = 0; z < 16; z++) {
                 final int actualZ = z + (chunkZ * 16);
-                this.generateColumn(heightmap, rand, primer, x, z, chunkX, chunkZ, actualX, actualZ);
+                if (!this.archWallOnly || archWallPlacement[x][z] > 0) {
+                    this.generateColumn(heightmap, rand, primer, x, z, chunkX, chunkZ, actualX, actualZ);
+                }
             }
         }
         // Caverns must be completely generated before decorating.
@@ -212,37 +771,51 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
     }
 
     private void generateColumn(int[][] heightmap, Random rand, ChunkPrimer primer, int x, int z, int chunkX, int chunkZ, int actualX, int actualZ) {
-        final BorderData border = this.getNearestBorder(actualX, actualZ);
-        final double distance = border.distance;
-        final int offset = border.offset;
+        //final BorderData border = this.getNearestBorder(actualX, actualZ);
+        //final double distance = border.distance;
+        //final int offset = border.offset;
         final Range height = this.conditions.getColumn(heightmap, actualX, actualZ);
         // Adjust the height to accommodate the shell.
         final int d = (int) this.decorators.shell.radius;
-        final int min = Math.max(1, height.min - d);
-        final int max = Math.min(255, height.max + d);
+        final int min = max(1, height.min - d);
+        final int max = min(255, height.max + d);
         final int yO = (int) this.heightOffset.GetAdjustedNoise(actualX, actualZ);
+        final float archWall = useArchWalls ? archWalls[archWallPlacement[x][z]] : 0.0f;
         for (int y = min; y < max; y++) {
             if (this.conditions.noise.GetBoolean(actualX, y + yO, actualZ)) {
-                final double relY = this.curveOffset + this.maxY - y;
-                final double curve = distance - ((relY * relY) / this.diffY * this.wallCurveRatio);
-
-                final double wall = this.wallNoise[(y + offset) & 255];
-                if (curve > wall) {
-                    this.place(rand, primer, height, x, y, z, yO, chunkX, chunkZ, actualX, actualZ);
-                } else if (curve > wall - d) {
-                    this.generateShell(rand, primer, x, y, z, y, chunkX, chunkZ);
-                }
+                this.place(rand, primer, height, x, y, z, yO, chunkX, chunkZ, actualX, actualZ, archWall);
             }
         }
     }
+        /*
+        for (int y = min; y < max; y++) {
+            if (this.conditions.noise.GetBoolean(actualX, y + yO, actualZ)) {
+                if(useArchWall) {
+                    this.place(rand, primer, height, x, y, z, yO, chunkX, chunkZ, actualX, actualZ, archWalls[Math.min((int)distance, 63)]);
+                } else {
+                    final double relY = this.curveOffset + this.maxY - y;
+                    final double curve = distance - ((relY * relY) / this.diffY * this.wallCurveRatio);
 
-    private void place(Random rand, ChunkPrimer primer, Range height, int x, int y, int z, int yO, int chunkX, int chunkZ, int actualX, int actualZ) {
+                    final double wall = this.wallNoise[(y + offset) & 255];
+                    if (curve > wall) {
+                        this.place(rand, primer, height, x, y, z, yO, chunkX, chunkZ, actualX, actualZ, 0);
+                    } else if (curve > wall - d) {
+                        this.generateShell(rand, primer, x, y, z, y, chunkX, chunkZ);
+                    }
+                }
+            }
+        }
+
+         */
+
+    private void place(Random rand, ChunkPrimer primer, Range height, int x, int y, int z, int yO, int chunkX, int chunkZ, int actualX, int actualZ, float archWallAddition) {
         for (FastNoise noise : this.generators) {
-            final float value = noise.GetNoise(actualX, y + yO, actualZ);
+            final float value = max(min(noise.GetNoise(actualX, y + yO, actualZ) + archHeight[max(y + yO, 0)] + archWallAddition, 1.0f), -1.0f);
+            //final float value = Math.max(Math.min(noise.GetNoise(actualX, y + yO, actualZ) + archHeight[Math.max(y + yO, 0)] + archWallAddition, 1.0f), -1.0f);
             if (noise.IsInThreshold(value)) {
                 if (height.contains(y)) {
                     this.replaceBlock(rand, primer, x, y, z, chunkX, chunkZ);
-                    this.caverns.add(x, y, z);
+                    //this.caverns.add(x, y, z);
                 } else {
                     this.generateShell(rand, primer, x, y, z, y, chunkX, chunkZ);
                 }
@@ -253,6 +826,99 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
         }
     }
 
+    /** Spawns whichever cave block is valid at this location, or else air. */
+    @Override
+    protected void replaceBlock(Random rand, ChunkPrimer primer, int x, int y, int z, int chunkX, int chunkZ) {
+        if (this.decorators.canReplace.test(primer.getBlockState(x, y, z))) {
+            // Only add to list of blocks to decorate if it was successfully replaced
+            this.caverns.add(x, y, z);
+            for (ConfiguredCaveBlock block : this.decorators.caveBlocks) {
+                if (block.canGenerate(x, y, z, chunkX, chunkZ)) {
+                    for (IBlockState state : block.cfg.states) {
+                        if (rand.nextFloat() <= block.cfg.integrity) {
+                            primer.setBlockState(x, y, z, state);
+                            return;
+                        }
+                    }
+                }
+            }
+            primer.setBlockState(x, y, z, BLK_AIR);
+        }
+    }
+
+    /** Generates giant air pockets in this chunk using a series of 3D noise generators. */
+    private void generateCastle(int[][] heightmap, Random rand, World world, ChunkPrimer primer, int chunkX, int chunkZ) {
+        for (int x = 0; x < 16; x++) {
+            final int actualX = x + (chunkX * 16);
+            for (int z = 0; z < 16; z++) {
+                final int actualZ = z + (chunkZ * 16);
+                if (archWallPlacement[x][z] != 0) {
+                    this.generateCastleColumn(heightmap, rand, primer, x, z, chunkX, chunkZ, actualX, actualZ);
+                }
+            }
+        }
+        // Caverns must be completely generated before decorating.
+        this.decorateAll(this.caverns, rand, world, primer, chunkX, chunkZ);
+    }
+
+    private void generateCastleColumn(int[][] heightmap, Random rand, ChunkPrimer primer, int x, int z, int chunkX, int chunkZ, int actualX, int actualZ) {
+        List<IBlockState> blockList = cfg.archaeneWallFixed.get(archWallPlacement[x][z]).blocks;
+        final int listMax = blockList.size() - 1;
+        if (listMax >= 0) {
+            //final Range height = this.conditions.getColumn(heightmap, actualX, actualZ);
+            final int min = max(1, this.minY);
+            final int max = min(255, this.maxY);
+            final int h = (int) archWalls[archWallPlacement[x][z]];
+            // I'm sorry
+            final float r = abs(archWalls[archWallPlacement[x][z]] - (float) h);
+            if (h >= 0) {
+                final int wallMax = max + h;
+                final int solidBlocksMax = 5;
+                int solidBlocks = 0;
+                int listIndex = 0;
+                for (int y = wallMax; y >= min; y--) {
+                    IBlockState block = primer.getBlockState(x, y, z);
+                    IBlockState newBlock = blockList.get(min(listIndex,listMax));
+                    listIndex++;
+                    if (block == BLK_AIR) {
+                        if(rand.nextFloat() < r || r == 0f) {
+                            primer.setBlockState(x, y, z, newBlock);
+                            this.caverns.add(x, y, z);
+                        }
+                    } else {
+                        if (this.decorators.canReplace.test(block)) {
+                            if(rand.nextFloat() < r || r == 0f) {
+                                primer.setBlockState(x, y, z, newBlock);
+                                this.caverns.add(x, y, z);
+                            }
+                        }
+                        solidBlocks++;
+                        if(solidBlocks > solidBlocksMax)
+                            return;
+                    }
+                }
+            } else {
+                final int wallMax = max - h;
+                for (int y = wallMax; y >= min; y--) {
+                    IBlockState block = primer.getBlockState(x, y, z);
+                    if (this.decorators.canReplace.test(block)) {
+                        int listIndex = 0;
+                        for (int yh = y; yh <= y + listMax; yh++) {
+                            IBlockState newBlock = blockList.get(min(listIndex,listMax));
+                            if(rand.nextFloat() < r || r == 0f) {
+                                primer.setBlockState(x, yh, z, newBlock);
+                                this.caverns.add(x, yh, z);
+                            }
+                            listIndex++;
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    /*
     private BorderData getNearestBorder(int x, int z) {
         double shortestDistance = Double.MAX_VALUE;
         int offset = 0;
@@ -268,6 +934,7 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
         }
         return new BorderData(shortestDistance, offset);
     }
+    */
 
     private void decorateCaverns(Random rand, ChunkPrimer primer, int chunkX, int chunkZ) {
         this.caverns.forEach((x, y, z) -> this.decorateBlock(rand, primer, x, y, z, chunkX, chunkZ));
@@ -317,6 +984,14 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
         return false;
     }
 
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
+    public static class sampler {
+        public final int x;
+        public final int y;
+        public final int z;
+        public final float mult;
+    }
+/*
     @AllArgsConstructor
     private static class ChunkTestData {
         final int x;
@@ -329,4 +1004,5 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
         final double distance;
         final int offset;
     }
+ */
 }

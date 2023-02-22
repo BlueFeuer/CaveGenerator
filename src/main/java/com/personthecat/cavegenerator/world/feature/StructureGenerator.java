@@ -5,10 +5,13 @@ import com.personthecat.cavegenerator.model.Range;
 import lombok.extern.log4j.Log4j2;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.util.Rotation;
+import net.minecraft.util.Mirror;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.world.biome.Biome;
 import net.minecraft.world.gen.structure.template.Template;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.Random;
 
@@ -20,6 +23,8 @@ public class StructureGenerator extends FeatureGenerator {
 
     private final StructureSettings cfg;
     private final Template structure;
+    private Integer rotation;
+    private Integer mirror;
 
     public StructureGenerator(StructureSettings cfg, World world) {
         super(cfg.conditions, world);
@@ -30,7 +35,8 @@ public class StructureGenerator extends FeatureGenerator {
     @Override
     protected void doGenerate(WorldContext ctx) {
         final BlockPos center = new BlockPos(ctx.offsetX, 0, ctx.offsetZ);
-        if (conditions.biomes.test(ctx.world.getBiomeForCoordsBody(center))) {
+        final Biome b = this.conditions.proxyDimension == 0 ? ctx.world.getBiomeForCoordsBody(new BlockPos(ctx.offsetX, 0, ctx.offsetZ)) : ctx.proxyBiomes.get(this.conditions.proxyDimension - 1);
+        if (conditions.biomes.test(b)) {
             for (int i = 0; i < cfg.count; i++) {
                 if (ctx.rand.nextDouble() <= cfg.chance) {
                     this.generateSingle(ctx);
@@ -44,9 +50,12 @@ public class StructureGenerator extends FeatureGenerator {
             .filter(pos -> conditions.noise.GetBoolean(pos.getX(), pos.getY(), pos.getZ()));
         // Attempt to locate a suitable spawn position and then proceed.
         spawnPos.ifPresent(pos -> {
+            this.rotation = cfg.rotation.isEmpty() ? 0 : cfg.rotation.get(ctx.rand.nextInt(cfg.rotation.size()));
+            this.mirror = cfg.mirroring.isEmpty() ? 0 : cfg.mirroring.get(ctx.rand.nextInt(cfg.mirroring.size()));
             if (allChecksPass(pos, ctx.world)) {
                 this.preStructureSpawn(ctx, pos);
-                final BlockPos adjusted = offset(centerBySize(pos, structure.getSize()), cfg.offset);
+                final BlockPos adjusted = offset(centerBySize(pos, transformCoordinates(this.rotation, this.mirror, structure.getSize())), transformCoordinates(this.rotation, this.mirror, cfg.offset));
+                //final BlockPos adjusted = offset(centerBySize(pos, structure.getSize()), cfg.offset);
                 StructureSpawner.spawnStructure(structure, cfg.placement, ctx.world, adjusted);
             }
         });
@@ -54,11 +63,11 @@ public class StructureGenerator extends FeatureGenerator {
 
     private boolean allChecksPass(BlockPos pos, World world) {
         return checkSources(cfg.matchers, world, pos)
-            && checkNonSolid(cfg.nonSolidChecks, world, pos)
-            && checkSolid(cfg.solidChecks, world, pos)
-            && checkAir(cfg.airChecks, world, pos)
-            && checkWater(cfg.waterChecks, world, pos)
-            && checkBlocks(cfg.blockChecks, world, pos);
+            && checkNonSolid(cfg.nonSolidChecks, world, pos, this.rotation, this.mirror)
+            && checkSolid(cfg.solidChecks, world, pos, this.rotation, this.mirror)
+            && checkAir(cfg.airChecks, world, pos, this.rotation, this.mirror)
+            && checkWater(cfg.waterChecks, world, pos, this.rotation, this.mirror)
+            && checkBlocks(cfg.blockChecks, world, pos, this.rotation, this.mirror);
     }
 
     /** Attempts to determine a suitable spawn point in the current location. */
@@ -95,24 +104,26 @@ public class StructureGenerator extends FeatureGenerator {
         for (int i = 0; i < VERTICAL_RETRIES; i++) {
             // Start with random (x, z) coordinates.
             final BlockPos xz = this.randCoords(info.rand, structure.getSize(), info.offsetX, info.offsetZ);
-            final int x = xz.getX();
-            final int z = xz.getZ();
-            final Range height = conditions.getColumn(x, z);
-            final int maxY = cfg.checkSurface
-                ? Math.min(info.heightmap[x & 15][z & 15] - SURFACE_ROOM, height.max)
-                : info.world.getActualHeight();
-            final int minY = height.min;
-            if (minY >= maxY || !conditions.region.GetBoolean(x, z)) continue;
-
+            final int x = cfg.archaeneX == -1 ? xz.getX() : info.offsetX + cfg.archaeneX - 8;
+            final int z = cfg.archaeneZ == -1 ? xz.getZ() : info.offsetZ + cfg.archaeneZ - 8;
             final int y;
-            // Search both -> just up -> just down.
-            if (cfg.directions.up && cfg.directions.down) {
-                y = this.findOpeningVertical(info.rand, info.world, x, z, minY, maxY);
-            } else if (cfg.directions.up) {
-                y = this.randFindCeiling(info.world, info.rand, x, z, minY, maxY);
-            } else {
-                y = this.randFindFloor(info.world, info.rand, x, z, minY, maxY);
-            }
+            if (cfg.archaeneY == -1) {
+                final Range height = conditions.getColumn(x, z);
+                final int maxY = cfg.checkSurface
+                    ? Math.min(info.heightmap[x & 15][z & 15] - SURFACE_ROOM, height.max)
+                    : info.world.getActualHeight();
+                final int minY = height.min;
+                if (minY >= maxY || !conditions.region.GetBoolean(x, z)) continue;
+
+                // Search both -> just up -> just down.
+                if (cfg.directions.up && cfg.directions.down) {
+                    y = this.findOpeningVertical(info.rand, info.world, x, z, minY, maxY);
+                } else if (cfg.directions.up) {
+                    y = this.randFindCeiling(info.world, info.rand, x, z, minY, maxY);
+                } else {
+                    y = this.randFindFloor(info.world, info.rand, x, z, minY, maxY);
+                }
+            } else y = cfg.archaeneY;
             // Check to see if an opening was found, else retry;
             if (y != NONE_FOUND) {
                 return full(new BlockPos(x, y, z));
@@ -314,10 +325,10 @@ public class StructureGenerator extends FeatureGenerator {
 
     /** All operations related to structures before spawning should be organized herein. */
     private void preStructureSpawn(WorldContext info, BlockPos pos) {
-        if (cfg.rotateRandomly) {
-            final Rotation randRotation = Rotation.values()[info.rand.nextInt(3)];
-            cfg.placement.setRotation(randRotation);
-        }
+        final Rotation randRotation = Rotation.values()[this.rotation];
+        final Mirror randMirror = Mirror.values()[this.mirror];
+        cfg.placement.setRotation(randRotation);
+        cfg.placement.setMirror(randMirror);
         if (cfg.debugSpawns) {
             log.info("Spawning {} at {}", cfg.name, pos);
         }

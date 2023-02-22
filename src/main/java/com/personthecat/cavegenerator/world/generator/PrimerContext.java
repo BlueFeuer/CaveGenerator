@@ -5,10 +5,13 @@ import com.personthecat.cavegenerator.world.BiomeSearch;
 import net.minecraft.world.World;
 import net.minecraft.world.chunk.ChunkPrimer;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.Random;
 
 public class PrimerContext {
     final BiomeSearch biomes;
+    final List<BiomeSearch> proxyBiomes;
     final int[][] heightmap;
     final World world;
     final Random localRand;
@@ -24,7 +27,8 @@ public class PrimerContext {
         World world,
         int chunkX,
         int chunkZ,
-        ChunkPrimer primer
+        ChunkPrimer primer,
+        List<BiomeSearch> proxyBiomes
     ) {
         this.biomes = biomes;
         this.heightmap = heightmap;
@@ -35,5 +39,7 @@ public class PrimerContext {
         this.offsetX = chunkX * 16;
         this.offsetZ = chunkZ * 16;
         this.primer = primer;
+        this.proxyBiomes = proxyBiomes;;
     }
+
 }

@@ -47,11 +47,13 @@ public class StalactiteGenerator extends FeatureGenerator {
         // with which `noise` is calculated, theoretically impacting performance.
         // Lower frequencies do not require as high a resolution, as this
         // difference would typically not be visible.
-        for (int x = ctx.offsetX; x < ctx.offsetX + 16; x = x + resolution) {
-            for (int z = ctx.offsetZ; z < ctx.offsetZ + 16; z = z + resolution) {
-                final Biome biome = ctx.world.getBiome(new BlockPos(x, 0, z));
-                if (conditions.biomes.test(biome) && conditions.region.GetBoolean(x, z)) {
-                    this.generateRegion(ctx, localRand, x, z);
+        final Biome b = this.conditions.proxyDimension == 0 ? ctx.world.getBiome(new BlockPos(ctx.offsetX, 0, ctx.offsetZ)) : ctx.proxyBiomes.get(this.conditions.proxyDimension - 1);
+        if(conditions.biomes.test(b)) {
+            for (int x = ctx.offsetX; x < ctx.offsetX + 16; x = x + resolution) {
+                for (int z = ctx.offsetZ; z < ctx.offsetZ + 16; z = z + resolution) {
+                    if (conditions.region.GetBoolean(x, z)) {
+                        this.generateRegion(ctx, localRand, x, z);
+                    }
                 }
             }
         }

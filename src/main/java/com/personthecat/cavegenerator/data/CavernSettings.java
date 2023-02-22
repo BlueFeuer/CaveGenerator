@@ -1,6 +1,8 @@
 package com.personthecat.cavegenerator.data;
 
 import com.personthecat.cavegenerator.config.CavePreset;
+import com.personthecat.cavegenerator.model.ArchaeneWallFixed;
+import com.personthecat.cavegenerator.model.BlockCheck;
 import com.personthecat.cavegenerator.model.Range;
 import com.personthecat.cavegenerator.util.HjsonMapper;
 import lombok.AccessLevel;
@@ -83,6 +85,35 @@ public class CavernSettings {
     /** A list of noise generators to produce the shape of these caverns. */
     @Default List<NoiseSettings> generators = Collections.singletonList(DEFAULT_GENERATOR);
 
+    /** BlueFire's magic voodoo hoodoo for configurable cavern height-based threshold settings.  */
+    @Default List<Float> archaeneHeight = Collections.emptyList();
+
+    /** BlueFire's magic voodoo hoodoo for configurable cavern horizontal threshold settings.  */
+    @Default List<Float> archaeneWalls = Collections.emptyList();
+
+    /** BlueFire's magic voodoo hoodoo for configuring how the horizontal threshold settings are applied  */
+    @Default List<Integer> archaeneWallArray = Collections.emptyList();
+
+    /** BlueFire's magic voodoo hoodoo for ... castle walls.  */
+    @Default List<ArchaeneWallFixed> archaeneWallFixed = Collections.emptyList();
+
+    /** Whether to interpolate biome borders for smoother walls. */
+    @Default boolean archaeneWallOnly = false;
+
+    /** Whether to interpolate cavern noise. */
+    @Default boolean archaeneInterpolation = false;
+
+    /** Attempt to slur sampled caverns upward by adding a portion of the next sample down if it's higher. */
+    @Default float archaeneInterpStretch = 0.0f;
+
+    /** Interpolation X, Y, and Z resolution. */
+    @Default int archaeneInterpX = 3;
+    @Default int archaeneInterpY = 2;
+    @Default int archaeneInterpZ = 3;
+
+    /** Whether to use alternate generator that skips all noise and does not place blocks, only placing decorations. */
+    @Default boolean archaeneDecorator = false;
+
     /** A list of tunnels that will spawn connected to these caverns. */
     @Default Optional<TunnelSettings> branches = empty();
 
@@ -111,6 +142,17 @@ public class CavernSettings {
             .mapFloat(Fields.wallCurveRatio, builder::wallCurveRatio)
             .mapBool(Fields.wallInterpolation, builder::wallInterpolation)
             .mapArray(Fields.generators, CavernSettings::createNoise, builder::generators)
+            .mapFloatList(Fields.archaeneHeight, builder::archaeneHeight)
+            .mapFloatList(Fields.archaeneWalls, builder::archaeneWalls)
+            .mapIntList(Fields.archaeneWallArray, builder::archaeneWallArray)
+            .mapValueArray(CavernSettings.Fields.archaeneWallFixed, ArchaeneWallFixed::fromValue, builder::archaeneWallFixed)
+            .mapBool(Fields.archaeneWallOnly, builder::archaeneWallOnly)
+            .mapBool(Fields.archaeneInterpolation, builder::archaeneInterpolation)
+            .mapFloat(Fields.archaeneInterpStretch, builder::archaeneInterpStretch)
+            .mapInt(Fields.archaeneInterpX, builder::archaeneInterpX)
+            .mapInt(Fields.archaeneInterpY, builder::archaeneInterpY)
+            .mapInt(Fields.archaeneInterpZ, builder::archaeneInterpZ)
+            .mapBool(Fields.archaeneDecorator, builder::archaeneDecorator)
             .mapObject(Fields.branches, o -> copyBranches(builder, o))
             .mapBool(Fields.deferred, builder::deferred)
             .release(builder::build);

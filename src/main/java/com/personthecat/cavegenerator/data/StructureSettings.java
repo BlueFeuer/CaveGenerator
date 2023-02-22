@@ -73,6 +73,15 @@ public class StructureSettings {
     /** The number of spawn attempts per chunk. */
     @Default int count = 1;
 
+    /** Fixed X coordinate to only check. */
+    @Default int archaeneX = -1;
+
+    /** Fixed Y coordinate to only check. */
+    @Default int archaeneY = -1;
+
+    /** Fixed Z coordinate to only check. */
+    @Default int archaeneZ = -1;
+
     /** Whether to display the spawn coordinates of this structure in the log. */
     @Default boolean debugSpawns = false;
 
@@ -80,7 +89,21 @@ public class StructureSettings {
     @Default String command = "";
 
     /** Whether to rotate this structure randomly. */
-    @Default boolean rotateRandomly = false;
+    //@Default boolean rotateRandomly = false;
+
+    /** Whether to rotate this structure randomly.
+     * 0 = 270° rotation - x,y -> y,-x
+     * 1 = 90° rotation - x,y -> -y,x
+     * 2 = 180° rotation - x,y -> -x,-y
+     * 3 = 0° rotation - default */
+    @Default List<Integer> rotation = Collections.emptyList();;
+
+    /** Whether to mirror this structure randomly.
+     * Currently does not work as intended.
+     * 0 = mirror y - x,y -> x,-y
+     * 1 = mirror x - x,y -> -x,y
+     * 2 = no mirror, default */
+    @Default List<Integer> mirroring = Collections.emptyList();;
 
     public static StructureSettings from(JsonObject json, OverrideSettings overrides) {
         final ConditionSettings conditions = overrides.apply(DEFAULT_CONDITIONS.toBuilder()).build();
@@ -108,9 +131,14 @@ public class StructureSettings {
             .mapBlockPos(Fields.offset, builder::offset)
             .mapFloat(Fields.chance, builder::chance)
             .mapInt(Fields.count, builder::count)
+            .mapInt(Fields.archaeneX, builder::archaeneX)
+            .mapInt(Fields.archaeneY, builder::archaeneY)
+            .mapInt(Fields.archaeneZ, builder::archaeneZ)
             .mapBool(Fields.debugSpawns, builder::debugSpawns)
             .mapString(Fields.command, builder::command)
-            .mapBool(Fields.rotateRandomly, builder::rotateRandomly)
+            .mapIntList(Fields.rotation, builder::rotation)
+            .mapIntList(Fields.mirroring, builder::mirroring)
+            //.mapBool(Fields.rotateRandomly, builder::rotateRandomly)
             .release(builder::build);
     }
 

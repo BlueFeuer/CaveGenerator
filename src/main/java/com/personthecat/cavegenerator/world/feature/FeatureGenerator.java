@@ -254,9 +254,45 @@ public abstract class FeatureGenerator {
         return matchers.contains(world.getBlockState(pos));
     }
 
+    protected BlockPos transformCoordinates(Integer rot, Integer mirr, BlockPos coord) {
+        int x;
+        int z;
+        int y = coord.getY();
+        switch (rot) {
+            case (3): // 270 degree rotation
+                x = coord.getZ();
+                z = -coord.getX();
+                break;
+            case (1): // 90 degree rotation
+                x = -coord.getZ();
+                z = coord.getX();
+                break;
+            case (2): // 180 degree rotation
+                x = -coord.getX();
+                z = -coord.getZ();
+                break;
+            default: // 0 degree rotation
+                x = coord.getX();
+                z = coord.getZ();
+                break;
+        }
+        switch (mirr) {
+            case (2): // mirror on z axis
+                z = -z;
+                break;
+            case (1):// mirror on x axis
+                x = -x;
+                break;
+            default: // no mirror
+                break;
+        }
+        return new BlockPos(x, y, z);
+    }
+
     /** Determines whether non-solid blocks exist at each of the relative coordinates. */
-    protected final boolean checkNonSolid(List<BlockPos> relative, World world, BlockPos origin) {
-        for (BlockPos p : relative) {
+    protected final boolean checkNonSolid(List<BlockPos> relative, World world, BlockPos origin, Integer rot, Integer mirror) {
+        for (BlockPos r : relative) {
+            BlockPos p = transformCoordinates(rot, mirror, r);
             if (isSolid(world, origin.add(p.getX(), p.getY(), p.getZ()))) {
                 return false;
             }
@@ -265,8 +301,9 @@ public abstract class FeatureGenerator {
     }
 
     /** Determines whether solid blocks exist at each of the relative coordinates. */
-    protected final boolean checkSolid(List<BlockPos> relative, World world, BlockPos origin) {
-        for (BlockPos p : relative) {
+    protected final boolean checkSolid(List<BlockPos> relative, World world, BlockPos origin, Integer rot, Integer mirror) {
+        for (BlockPos r : relative) {
+            BlockPos p = transformCoordinates(rot, mirror, r);
             if (!isSolid(world, origin.add(p.getX(), p.getY(), p.getZ()))) {
                 return false;
             }
@@ -275,8 +312,9 @@ public abstract class FeatureGenerator {
     }
 
     /** Determines whether air blocks exist at each of the relative coordinates. */
-    protected final boolean checkAir(List<BlockPos> relative, World world, BlockPos origin) {
-        for (BlockPos p : relative) {
+    protected final boolean checkAir(List<BlockPos> relative, World world, BlockPos origin, Integer rot, Integer mirror) {
+        for (BlockPos r : relative) {
+            BlockPos p = transformCoordinates(rot, mirror, r);
             if (!world.getBlockState(origin.add(p.getX(), p.getY(), p.getZ())).equals(Blocks.AIR.getDefaultState())) {
                 return false;
             }
@@ -285,8 +323,9 @@ public abstract class FeatureGenerator {
     }
 
     /** Determines whether air blocks exist at each of the relative coordinates. */
-    protected final boolean checkWater(List<BlockPos> relative, World world, BlockPos origin) {
-        for (BlockPos p : relative) {
+    protected final boolean checkWater(List<BlockPos> relative, World world, BlockPos origin, Integer rot, Integer mirror) {
+        for (BlockPos r : relative) {
+            BlockPos p = transformCoordinates(rot, mirror, r);
             if (!world.getBlockState(origin.add(p.getX(), p.getY(), p.getZ())).equals(Blocks.WATER.getDefaultState())) {
                 return false;
             }
@@ -295,9 +334,10 @@ public abstract class FeatureGenerator {
     }
 
     /** Determines whether specific blocks exists at each of the relative coordinates. */
-    protected final boolean checkBlocks(List<BlockCheck> checks, World world, BlockPos origin) {
+    protected final boolean checkBlocks(List<BlockCheck> checks, World world, BlockPos origin, Integer rot, Integer mirror) {
         for (BlockCheck c : checks) {
-            for (BlockPos p : c.positions) {
+            for (BlockPos r : c.positions) {
+                BlockPos p = transformCoordinates(rot, mirror, r);
                 final IBlockState state = world.getBlockState(origin.add(p.getX(), p.getY(), p.getZ()));
                 if (!c.matchers.contains(state)) {
                     return false;

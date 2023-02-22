@@ -92,6 +92,20 @@ public class ConfigFile {
         "occur."})
     public static boolean updateImports = true;
 
+    @Comment({
+            "A list of proxy dimensions to get a biome provider from in place of the dimension's normal biome provider.",
+            "This list must exactly correspond with archaeneUseProxyDims in length."
+    })
+    @RequiresWorldRestart
+    public static int[] archaeneProxyDims = { 0 };
+
+    @Comment({
+            "A list of what dimension uses a given proxy dimension in archaeneProxyDims.",
+            "This list must exactly correspond with archaneProxyDims in length."
+    })
+    @RequiresWorldRestart
+    public static int[] archaeneUseProxyDims = { 0 };
+
     @SubscribeEvent
     public static void onConfigChanged(ConfigChangedEvent.OnConfigChangedEvent event) {
         if (event.getModID().equals(Main.MODID)) {

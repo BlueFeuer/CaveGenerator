@@ -2,6 +2,7 @@ package com.personthecat.cavegenerator.world.generator;
 
 import com.personthecat.cavegenerator.data.ConditionSettings;
 import com.personthecat.cavegenerator.model.Conditions;
+import com.personthecat.cavegenerator.world.BiomeSearch;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.math.BlockPos;
@@ -36,8 +37,9 @@ public abstract class BasicGenerator {
     public void generate(PrimerContext ctx) {
         final int dim = ctx.world.provider.getDimension();
         if (conditions.dimensions.test(dim)) {
-            final Biome b = ctx.world.getBiome(new BlockPos(ctx.offsetX, 0, ctx.offsetZ));
-            if (conditions.biomes.test(b)) {
+            //final Biome b = ctx.world.getBiome(new BlockPos(ctx.offsetX, 0, ctx.offsetZ));
+            final BiomeSearch biomes = this.conditions.proxyDimension == 0 ? ctx.biomes : ctx.proxyBiomes.get(this.conditions.proxyDimension - 1);
+            if (biomes.anyMatches(this.conditions.biomes)) {
                 generateChecked(ctx);
             }
         }

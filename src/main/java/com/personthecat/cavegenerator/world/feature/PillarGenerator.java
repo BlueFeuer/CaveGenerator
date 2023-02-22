@@ -2,6 +2,7 @@ package com.personthecat.cavegenerator.world.feature;
 
 import com.personthecat.cavegenerator.data.PillarSettings;
 import com.personthecat.cavegenerator.model.Range;
+import com.personthecat.cavegenerator.world.BiomeSearch;
 import net.minecraft.block.BlockStairs;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
@@ -31,12 +32,35 @@ public class PillarGenerator extends FeatureGenerator {
     @Override
     protected void doGenerate(WorldContext ctx) {
         final Random rand = ctx.rand;
+        final Biome b = this.conditions.proxyDimension == 0 ? ctx.world.getBiome(new BlockPos(ctx.offsetX, 0, ctx.offsetZ)) : ctx.proxyBiomes.get(this.conditions.proxyDimension - 1);
+        if (conditions.biomes.test(b)) {
+            for (int i = 0; i < rand.nextInt(cfg.count + 1); i++) {
+                // Avoid pillars spawning right next to each other.
+                final int x = ((rand.nextInt(6) * 2) + 2) + (ctx.chunkX * 16); // 2 to 14
+                final int z = ((rand.nextInt(6) * 2) + 1) + (ctx.chunkZ * 16); // 1 to 13
+                final Range height = conditions.getColumn(x, z);
+                if (!height.isEmpty() && conditions.region.GetBoolean(x, z)) {
+                    final int y = height.rand(rand);
+                    final int opening = findCeiling(ctx.world, x, y, z, height.max);
+                    if (opening != NONE_FOUND && conditions.noise.GetBoolean(x, opening, z)) {
+                        this.generateSingle(ctx.world, ctx.rand, new BlockPos(x, opening, z));
+                    }
+                }
+            }
+        }
+    }
+
+    /*
+    @Override
+    protected void doGenerate(WorldContext ctx) {
+        final Random rand = ctx.rand;
         for (int i = 0; i < rand.nextInt(cfg.count + 1); i++) {
             // Avoid pillars spawning right next to each other.
             final int x = ((rand.nextInt(6) * 2) + 2) + (ctx.chunkX * 16); // 2 to 14
             final int z = ((rand.nextInt(6) * 2) + 1) + (ctx.chunkZ * 16); // 1 to 13
             final Biome biome = ctx.world.getBiome(new BlockPos(x, 0, z));
-
+            final BiomeSearch biomes = this.conditions.proxyDimension == 0 ? ctx.biomes : ctx.proxyBiomes.get(this.conditions.proxyDimension - 1);
+            final Biome b = biomes.center;
             if (conditions.biomes.test(biome)) {
                 final Range height = conditions.getColumn(x, z);
 
@@ -50,6 +74,7 @@ public class PillarGenerator extends FeatureGenerator {
             }
         }
     }
+     */
 
     /** @param pos is the top block in the pillar. */
     private void generateSingle(World world, Random rand, BlockPos pos) {
