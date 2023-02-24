@@ -17,7 +17,7 @@ A powerful and customizable replacement for Mojang's cave generator.
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Better explanation and spreadsheet to generate values coming soon™.  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"Examples" in `blue_templates_archaenearrays`, used in `canyons.cave`.  
 &nbsp;&nbsp;&nbsp;&nbsp;archaeneWallFixed - Completely changes cavern generation if set, uses an identical array to `archaeneWallArray`.  
-&nbsp;&nbsp;&nbsp;&nbsp;Better explanation and spreadsheet to generate values coming soon™.  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Better explanation and spreadsheet to generate values coming soon™.  
 &nbsp;&nbsp;&nbsp;&nbsp;archaeneInterpolation - Boolean, whether the cavern should use interpolation or not.  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Example in `canyons.cave`.  
 &nbsp;&nbsp;&nbsp;&nbsp;archaeneInterpX - Spacing between samples on the X axis.  
