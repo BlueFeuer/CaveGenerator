@@ -4,6 +4,7 @@ import com.personthecat.cavegenerator.data.ClusterSettings;
 import com.personthecat.cavegenerator.model.Conditions;
 import com.personthecat.cavegenerator.util.MultiValueIdentityMap;
 import com.personthecat.cavegenerator.util.XoRoShiRo;
+import com.personthecat.cavegenerator.world.BiomeCache;
 import com.personthecat.cavegenerator.world.RandomChunkSelector;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.util.math.BlockPos;
@@ -55,7 +56,8 @@ public class ClusterGenerator extends ListGenerator<ClusterSettings> {
 
                     // Get absolute coordinates, generate in the center.
                     final int x = (cX * 16) + 8, z = (cZ * 16) + 8;
-                    final Biome b = world.getBiomeProvider().getBiome(new BlockPos(x, 0, z));
+                    //final Biome b = world.getBiomeProvider().getBiome(new BlockPos(x, 0, z));
+                    final Biome b = BiomeCache.getCachedBiome(x, z, world.provider);
                     if (conditions.biomes.test(b)) {
                         for (Pair<IBlockState, Integer> pair : cfg.states) {
                             final IBlockState state = pair.getLeft();

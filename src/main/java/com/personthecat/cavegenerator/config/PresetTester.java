@@ -185,7 +185,7 @@ public class PresetTester {
 
     private void testCluster(ClusterSettings s, String path) {
         final Range height = s.conditions.height;
-        if (!height.contains(s.centerHeight.min) || height.contains(s.centerHeight.max)) {
+        if (!height.contains(s.centerHeight.min) || !height.contains(s.centerHeight.max)) {
             final String center = ClusterSettings.Fields.centerHeight;
             log.log(low, "Invalid heights @ {}. {} does not contain {}", path, height, center);
         }

@@ -738,7 +738,7 @@ public class CavernGenerator extends WorldCarver implements TunnelSocket {
     }
 
     private void placeSampled(Random rand, ChunkPrimer primer, Range height, int x, int y, int z, int yO, int chunkX, int chunkZ, int actualX, int actualZ, float archWallAddition, int xdiv, int zdiv, int ydiv, int xmod, int zmod, int ymod) {
-        float value = this.getSample(xdiv, ydiv, zdiv, xmod, ymod, zmod) + archHeight[max(y + yO, 0)] + archWallAddition;
+        float value = this.getSample(xdiv, ydiv, zdiv, xmod, ymod, zmod) + archHeight[max(min(y + yO, 255), 0)] + archWallAddition;
             //log.info("value {} x {} y {} z {} xdiv {} ydiv {} zdiv {} xmod {} ymod {} zmod {}, archheight {} archwall {}", value, x, y, z, xdiv, ydiv, zdiv, xmod, ymod, zmod, archHeight[max(y + yO, 0)], archWallAddition);
             //final float value = Math.max(Math.min(noise.GetNoise(actualX, y + yO, actualZ) + archHeight[Math.max(y + yO, 0)] + archWallAddition, 1.0f), -1.0f);
         if (value <= 0f) {

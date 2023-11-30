@@ -87,7 +87,8 @@ public class BiomeSearch {
         );
          */
         final List<Biome> biomes = Arrays.asList(
-            provider.getBiome(new BlockPos(actualX + 8, 0, actualZ + 8))
+            //provider.getBiome(new BlockPos(actualX + 8, 0, actualZ + 8))
+            BiomeCache.getCachedBiome(actualX + 8, actualZ + 8, world.provider)
         );
         // Remove redundant entries.
         return new HashSet<>(biomes).toArray(new Biome[0]);
@@ -121,7 +122,8 @@ public class BiomeSearch {
         );
          */
         final List<Biome> biomes = Arrays.asList(
-            provider.getBiome(new BlockPos(actualX + 8, 0, actualZ + 8))
+            //provider.getBiome(new BlockPos(actualX + 8, 0, actualZ + 8))
+            BiomeCache.getCachedBiome(actualX + 8, actualZ + 8, world)
         );
         // Remove redundant entries.
         return new HashSet<>(biomes).toArray(new Biome[0]);
@@ -151,14 +153,17 @@ public class BiomeSearch {
         private static Data create(World world, int chunkX, int chunkZ) {
             final int centerX = (chunkX << 4) + 8;
             final int centerZ = (chunkZ << 4) + 8;
-            final Biome biome = world.getBiomeProvider().getBiome(new BlockPos(centerX, 0, centerZ));
+            //final Biome biome = world.getBiomeProvider().getBiome(new BlockPos(centerX, 0, centerZ));
+            final Biome biome = BiomeCache.getCachedBiome(centerX, centerZ, world.provider);
             return new Data(biome, chunkX, chunkZ, centerX, centerZ);
         }
 
         private static Data create2(WorldProvider world, int chunkX, int chunkZ) {
             final int centerX = (chunkX << 4) + 8;
             final int centerZ = (chunkZ << 4) + 8;
-            final Biome biome = world.getBiomeProvider().getBiome(new BlockPos(centerX, 0, centerZ));
+            //final Biome biome = world.getBiomeProvider().getBiome(new BlockPos(centerX, 0, centerZ));
+            final Biome biome = BiomeCache.getCachedBiome(centerX, centerZ, world);
+
             return new Data(biome, chunkX, chunkZ, centerX, centerZ);
         }
     }

@@ -95,8 +95,9 @@ public class Conditions {
 
     /** Get the current height range when given two absolute coordinates. */
     public Range getColumn(int x, int z) {
-        final int min = height.min + (int) floor.GetAdjustedNoise((float) x, (float) z);
-        final int max = height.max + (int) ceiling.GetAdjustedNoise((float) x, (float) z);
+        // Ensure range is between 0 and 255
+        final int min = Math.max(height.min + (int) floor.GetAdjustedNoise((float) x, (float) z), 0);
+        final int max = Math.min(height.max + (int) ceiling.GetAdjustedNoise((float) x, (float) z), 255);
         return Range.checkedOrEmpty(min, max);
     }
 

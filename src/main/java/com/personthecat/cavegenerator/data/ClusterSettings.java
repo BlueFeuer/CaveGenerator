@@ -101,7 +101,7 @@ public class ClusterSettings {
     }
 
     private static void copyChance(ClusterSettingsBuilder builder, float chance) {
-        builder.chance(chance).selectionThreshold((1.0F - chance) * 92.0F);
+        builder.chance(chance).selectionThreshold((1.0D - (double)chance) * 92.0D);
     }
 
     private static void copyRadius(ClusterSettingsBuilder builder, Range radius) {

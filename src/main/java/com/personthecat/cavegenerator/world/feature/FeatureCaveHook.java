@@ -4,12 +4,14 @@ import com.personthecat.cavegenerator.Main;
 import com.personthecat.cavegenerator.config.ConfigFile;
 import com.personthecat.cavegenerator.data.ConditionSettings;
 import com.personthecat.cavegenerator.noise.CachedNoiseHelper;
+import com.personthecat.cavegenerator.world.BiomeCache;
 import com.personthecat.cavegenerator.world.BiomeSearch;
 import com.personthecat.cavegenerator.world.GeneratorController;
 import com.personthecat.cavegenerator.world.HeightMapLocator;
 import com.personthecat.cavegenerator.world.generator.PrimerContext;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
+import net.minecraft.world.WorldProvider;
 import net.minecraft.world.chunk.IChunkProvider;
 import net.minecraft.world.gen.IChunkGenerator;
 import net.minecraft.world.biome.Biome;
@@ -33,15 +35,18 @@ public class FeatureCaveHook implements IWorldGenerator {
 
         final int centerX = chunkX*16 + 8;
         final int centerZ = chunkZ*16 + 8;
-        final Biome center = world.getBiomeProvider().getBiome(new BlockPos(centerX, 0, centerZ));
+        //final Biome center = world.getBiomeProvider().getBiome(new BlockPos(centerX, 0, centerZ));
+        //final Biome center = BiomeCache.getCachedBiome(centerX, centerZ, world.provider);
 
         // Get biome at the center of a chunk for all proxy dimensions to add to context
         List<Biome> proxyBiomes = new ArrayList<Biome>();
         for (int i = 0; i < ConfigFile.archaeneProxyDims.length; i++) {
             if(world.provider.getDimension() == ConfigFile.archaeneUseProxyDims[i]
                     && ConfigFile.archaeneProxyDims[i] != ConfigFile.archaeneUseProxyDims[i]) {
-                final BiomeProvider provider = DimensionManager.getWorld(ConfigFile.archaeneProxyDims[i]).getBiomeProvider();
-                proxyBiomes.add(provider.getBiome(new BlockPos(centerX, 0, centerZ)));
+                //final BiomeProvider provider = DimensionManager.getWorld(ConfigFile.archaeneProxyDims[i]).getBiomeProvider();
+                final WorldProvider provider = DimensionManager.getWorld(ConfigFile.archaeneProxyDims[i]).provider;
+                //proxyBiomes.add(provider.getBiome(new BlockPos(centerX, 0, centerZ)));
+                proxyBiomes.add(BiomeCache.getCachedBiome(centerX, centerZ, provider));
             }
         }
 
